@@ -1,25 +1,32 @@
 package com.example.xiaonote
 
+import android.content.ContentValues
+import android.database.sqlite.SQLiteDatabase
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.EditText
 import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.xiaonote.databinding.ActivityMainBinding
+import java.util.*
 
 class MainActivity : AppCompatActivity() {
-    lateinit var binding: ActivityMainBinding
+    private lateinit var binding: ActivityMainBinding
+    private lateinit var adapter: Folder
 
     override fun onCreate(savedInstanceState: Bundle?) {
         binding = ActivityMainBinding.inflate(layoutInflater)
         super.onCreate(savedInstanceState)
         setContentView(binding.root)
         supportActionBar?.hide()
-        val adapter = Folder()
+        val db = SQLite(this).writableDatabase
+        adapter = Folder(db)
         val folderCallback = FolderTouch(adapter)
         val folderTouchHelper = ItemTouchHelper(folderCallback)
         binding.folders.adapter = adapter
@@ -29,11 +36,21 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun createNote() = View.OnClickListener {
-
+        val editText = EditText(this)
+        AlertDialog.Builder(this)
+            .setTitle("Add Folder")
+            .setView(editText)
+            .setNegativeButton("Cancel") { a, _ ->
+                a.dismiss()
+            }
+            .setPositiveButton("Add") { _, _ ->
+                adapter.create(editText.text.toString())
+            }
+            .show()
     }
 }
 
-class FolderData(val name: String) {
+class FolderData(val name: String, val _id: String) {
     private val notes = mutableListOf<NotesData>()
 
     fun createNote(context: String) {
@@ -43,8 +60,17 @@ class FolderData(val name: String) {
 
 data class NotesData(val context: String)
 
-class Folder : RecyclerView.Adapter<Folder.FolderHolder>() {
+class Folder(private val db: SQLiteDatabase) : RecyclerView.Adapter<Folder.FolderHolder>() {
     private val folders = mutableListOf<FolderData>()
+
+    init {
+        val cr = db.query("FOLDER", arrayOf("_id", "name"), null, null, null, null, null)
+        while(cr.moveToNext()) {
+            val id = cr.getString(0)
+            val name = cr.getString(1)
+            folders.add(FolderData(name, id))
+        }
+    }
 
     class FolderHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         fun bind(folderName: String) {
@@ -77,6 +103,16 @@ class Folder : RecyclerView.Adapter<Folder.FolderHolder>() {
     fun delete(pos: Int) {
         folders.removeAt(pos)
         notifyItemRemoved(pos)
+    }
+
+    fun create(name: String) {
+        val uuid = UUID.randomUUID().toString()
+        val value = ContentValues().apply {
+            put("NAME", name)
+            put("_id", uuid)
+        }
+        folders.add(FolderData(name, uuid))
+        db.insert("FOLDER", null, value)
     }
 }
 
